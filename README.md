@@ -1,2 +1,7 @@
 # purchase-buddy
-An agentic approach to make your next purchase easy and conversational.
+An intelligent agentic shopping assistant built with langgraph that helps users purchase items from multiple providers.
+
+# project goals
+
+
+# tech stack

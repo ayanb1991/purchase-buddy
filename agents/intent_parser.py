@@ -1,15 +1,17 @@
-import re
+import json
 from models.state import PurchaseState, RequestedItem
+from langchain_openai import AzureChatOpenAI
+from langchain.messages import HumanMessage, SystemMessage
+from config import azure_openai_api_key, azure_openai_endpoint, azure_openai_deployment, azure_openai_api_version
 
-category_keywords = {
-    "grocery": ["milk", "bread", "eggs", "rice", "flour", "sugar", "salt"],
-    "electronics": ["headphones", "mouse", "keyboard", "charger", "laptop", "phone"],
-    "cooked food": ["biryani", "pizza", "pasta", "burger", "sandwich"]
-}
-
-""" A simple function to extract quantity from text."""
-def extract_quantity(text: str) -> int:
-  return 1
+# initialize LangChain LLM with Azure OpenAI
+llm = AzureChatOpenAI(
+    openai_api_key=azure_openai_api_key,
+    azure_endpoint=azure_openai_endpoint,
+    deployment_name=azure_openai_deployment,
+    openai_api_version=azure_openai_api_version,
+    temperature=0
+)
 
 """
   This agent will be the frontline of all user queries. Responsibility of this agent will be:
@@ -19,54 +21,71 @@ def extract_quantity(text: str) -> int:
   - Extract unit of the desired quantity such as pcs, pieces, kg, litre, boxes, and so on.
   - Decide the next action.
 """
-def parse_user_input(text: str) -> RequestedItem:
-  items = []
-  text = text.lower()
-
-  # reducing common phrases so that we can focus on the keywords
-  text = re.sub(r'\bi want\b|\bi need\b|\bbuy\b|\bget me\b', '', text)
-
-  # handling conjunctions like 'and' and commas when multiple items are requested
-  # splits text wherever the pattern matches
-  parts = re.split(r',|\sand\s', text)
-
-  for part in parts:
-        part = part.strip()
-        if not part:
-            continue
-        
-        quantity = extract_quantity(part)
-        
-        
-        item_text = re.sub(r'\d+\s*(?:pcs|pieces|units|nos|boxes)?', '', part).strip()
-        
-        for category, keywords in category_keywords.items():
-            for keyword in keywords:
-                if keyword in item_text:
-                    items.append(RequestedItem(
-                        name=keyword,
-                        category=category,
-                        quantity=quantity
-                    ))
-                    break
-    
-  return items
-
 def intent_parser_agent(state: PurchaseState) -> PurchaseState:
-    user_input = state["user_input"]
-    parsed_items = parse_user_input(user_input)
+    user_input = state.get("user_input", "")
 
-    # Add a message from the assistant summarizing the parsed items
-    if parsed_items:
-        summary = "I found these items:\n" + "\n".join(
-            f"- {item.quantity} x {item.name} ({item.category})" for item in parsed_items
-        )
-    else:
-        summary = "Sorry, I couldn't find any items in your request."
+    if not user_input:
+        messages = state.get("messages", [])
+        if messages:
+            # get the last user message
+            user_input = messages[-1].get("content", "")
 
-    # Update state
-    state["parsed_items"] = parsed_items
-    state["messages"] = ({"role": "assistant", "content": summary})
-    state["conversation_complete"] = True  # End after one turn for now
+    systemMsg = SystemMessage("""You are an intent parser cum analyser agent. Your job is to parse user requests for purchasing items and extract relevant information such as item names, categories, quantities, price expectations, delivery preferences and units.
+        Respond only in JSON format with the following structure:
+        {{
+            "items": [{{
+                "name": <item name>,
+                "category": <grocery|electronics|cooked food>,
+                "quantity": <quantity>,
+                "unit": <kg|litre|pcs||plate>,
+                "priceExpectation": <price expectation if mentioned>,
+                "isQuickDelivery": <true/false if mentioned like urgent|asap|instantly|quickly>,
+            }}],
+        "pincode": <pincode if mentioned>,
+        "deliveryPreference": <preferred delivery time if mentioned>,
+        "needsClarification": <true/false>,
+        "clarificationQuestions": [<list of questions if needsClarification is true>]
+        }}
+        - Normalize delivery preferences into specific hour ranges in 24Hr format like "10-12", "14-16".
+        - Morning time refers to "6-10".
+        - Before lunch refers to "12-14".
+        - After Lunch time refers to "14-17".
+        - Before Dinner time refers to "16-19".
+        - Supported categories are grocery, electronics, and cooked food.
+        """)
+    humanMsg = HumanMessage(f"{user_input}")
+
+    intentParserPrompt = [systemMsg, humanMsg]
+    # build the chain and invoke
+    response = llm.invoke(intentParserPrompt)
+    print(f"LLM Response: {response.content}")
+
+    try:
+        parsedResult = json.loads(response.content)
+
+        if parsedResult.get("needsClarification", False):
+            state["messages"].append({
+                "role": "assistant",
+                "content": "I have a few questions to clarify your request:\n" + "\n".join(parsedResult.get("clarificationQuestions", []))
+            })
+        else:
+            parsedItems = parsedResult.get("items", [])
+            state["parsed_items"] = parsedItems
+            state["user_pincode"] = parsedResult.get("pincode", "")
+            state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
+
+            # show parsed items to user
+            state["messages"].append({
+                "role": "assistant",
+                "content": f"I have understood your request. Here are the details:\n" +
+                           "\n".join([f"- {item['quantity']} {item.get('unit', '')} of {item['name']} ({item['category']})" for item in parsedItems]) +
+                           (f"\nPincode: {state['user_pincode']}" if state['user_pincode'] else "") +
+                           (f"\nPreferred Delivery Time: {state['delivery_time_preference']}" if state['delivery_time_preference'] else "")
+            })
+    except json.JSONDecodeError:
+        state["messages"].append({
+            "role": "assistant",
+            "content": "I'm sorry, I couldn't understand your request. Could you please rephrase?"
+        })
 
     return state

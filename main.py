@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage
 
 def run_purchase_buddy():
   print("Welcome to PurchaseBuddy! Type your requests below.\n")
-  print("Example: 'I want to buy 6 eggs and 1 bread.'")
+  print("Example: 'I want a plate of biryani quickly'")
   print("Type 'exit' to quit the application.\n")
 
   graph = StateGraph(PurchaseState)
@@ -24,11 +24,10 @@ def run_purchase_buddy():
       messages=[],
       user_input="",
       parsed_items=[],
-      current_agent="",
-      conversation_complete=False
+      current_agent=""
   )
 
-  while not state.get("conversation_complete"):
+  while True:
       user_input = input("You: ").strip()
 
       if not user_input:
@@ -41,16 +40,27 @@ def run_purchase_buddy():
       state["user_input"] = user_input
       state["current_agent"] = "intent_parser"
 
+      # append user message to state messages
+      state["messages"].append({
+            "role": "user",
+            "content": user_input
+      })
+
       # invoke the app with the current state
       result = app.invoke(state)
       state.update(result)
       # print(state["messages"])
 
-      for msg in state.get("messages", []):
-            if isinstance(msg, AIMessage):
-                print(f"\nBuddy: {msg.content}")
-      
-      state["messages"] = []
+      messages = result.get("messages", [])
+      if messages:
+            lastMessage = messages[-1]
+      if isinstance(lastMessage, AIMessage):
+            print(f"\nBuddy: {lastMessage.content}")
+      # try:
+            
+      # except Exception as e:
+      #      print(f"Error: {e}")
+      #      state = None
 
 if __name__ == "__main__":
     run_purchase_buddy()

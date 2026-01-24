@@ -1,5 +1,5 @@
 import json
-from models.state import PurchaseState, RequestedItem
+from models.state import PurchaseState
 from langchain_openai import AzureChatOpenAI
 from langchain.messages import HumanMessage, SystemMessage
 from config import azure_openai_api_key, azure_openai_endpoint, azure_openai_deployment, azure_openai_api_version
@@ -73,6 +73,7 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
             state["parsed_items"] = parsedItems
             state["user_pincode"] = parsedResult.get("pincode", "")
             state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
+            state["next_agent"] = "purchase_agent"
 
             # show parsed items to user
             state["messages"].append({
@@ -87,5 +88,6 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
             "role": "assistant",
             "content": "I'm sorry, I couldn't understand your request. Could you please rephrase?"
         })
+        state["next_agent"] = "human_input_agent"
 
     return state

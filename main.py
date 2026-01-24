@@ -1,7 +1,19 @@
 from langgraph.graph import StateGraph, END
+from agents.purchase import purchase_agent
 from models.state import PurchaseState
 from agents.intent_parser import intent_parser_agent
 from langchain_core.messages import AIMessage
+
+def conditional_routing(state: PurchaseState):
+      """ Conditional routing logic based on state """
+      next_agent = state.get("next_agent", "")
+
+      if next_agent == "human_input_agent":
+          return END
+      elif next_agent == "end":
+          return END
+      
+      return next_agent
 
 def run_purchase_buddy():
   print("Welcome to PurchaseBuddy! Type your requests below.\n")
@@ -9,11 +21,22 @@ def run_purchase_buddy():
   print("Type 'exit' to quit the application.\n")
 
   graph = StateGraph(PurchaseState)
+  # nodes
   graph.add_node("intent_parser", intent_parser_agent)
+  graph.add_node("purchase_agent", purchase_agent)
 
   graph.set_entry_point("intent_parser")
 
-  graph.add_edge("intent_parser", END)
+  # edges
+  graph.add_conditional_edges("intent_parser", conditional_routing, {
+       "human_input_agent": END,
+       "purchase_agent": "purchase_agent",
+       END: END
+  })
+  graph.add_conditional_edges("purchase_agent", conditional_routing, {
+       "human_input_agent": END,
+       END: END
+  })
 
   # compile the graph into an executable app
   app = graph.compile()
@@ -24,7 +47,6 @@ def run_purchase_buddy():
       messages=[],
       user_input="",
       parsed_items=[],
-      current_agent=""
   )
 
   while True:
@@ -38,7 +60,6 @@ def run_purchase_buddy():
             break
       
       state["user_input"] = user_input
-      state["current_agent"] = "intent_parser"
 
       # append user message to state messages
       state["messages"].append({

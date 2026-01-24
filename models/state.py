@@ -16,4 +16,19 @@ class PurchaseState(TypedDict):
     parsed_items: List[RequestedItem]
     user_pincode: str
     delivery_time_preference: str
-    current_agent: str
+    next_agent: str
+    selected_provider: str
+    provider_results: List[dict]
+
+class InventoryItem(BaseModel):
+    name: str
+    category: str
+    type: str
+    unit: str
+    price: float
+    provider: str
+    isQuickDelivery: bool
+    isAvailable: bool
+    pincodes: List[str]
+    deliveryHours: str
+    availabilityStatus: str | None = None

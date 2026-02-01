@@ -2,18 +2,18 @@ from data.items import Inventory
 from models.state import InventoryItem
 
 
-def searchSwiggy(itemName: str, category: str, pincode: str  = None) -> list[InventoryItem]:
+def searchSwiggy(itemName: str, category: str, pincode: str = None) -> list[InventoryItem]:
     results = []
 
-    if category.lower() in Inventory:
+    if any(item['category'].lower() == category.lower() for item in Inventory):
         categoryItems = [item for item in Inventory if item['category'].lower() == category.lower()]
 
         for item in categoryItems:
             if item['provider'].lower() == "swiggy" and itemName.lower() in item["name"].lower():
-                if pincode and pincode not in item.get("pincodes", []):
-                    item = item.copy()
-                    item["isAvailable"] = False
-                    item["availabilityStatus"] = "Item not deliverable to the provided pincode."
-                results.append(InventoryItem(**item))
+                item_copy = item.copy()
+                if pincode and pincode not in item_copy.get("pincodes", []):
+                    item_copy["isAvailable"] = False
+                    item_copy["availabilityStatus"] = "Item not deliverable to the provided pincode."
+                results.append(InventoryItem(**item_copy))
 
     return results

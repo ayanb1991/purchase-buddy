@@ -32,7 +32,7 @@ Inventory: list[InventoryItem] = [
     {
         "name": "Biryani",
         "type": "food",
-        "category": "cookedFood",
+        "category": "cookedfood",
         "unit": "plate",
         "price": 250,
         "provider": "Swiggy",
@@ -44,7 +44,7 @@ Inventory: list[InventoryItem] = [
     {
         "name": "Biryani",
         "type": "food",
-        "category": "cookedFood",
+        "category": "cookedfood",
         "unit": "plate",
         "price": 300,
         "provider": "Zomato",

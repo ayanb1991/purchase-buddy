@@ -35,7 +35,7 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
         {{
             "items": [{{
                 "name": <item name>,
-                "category": <grocery|electronics|cooked food>,
+                "category": <grocery|electronics|cookedFood>,
                 "quantity": <quantity>,
                 "unit": <kg|litre|pcs||plate>,
                 "priceExpectation": <price expectation if mentioned>,
@@ -51,7 +51,6 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
         - Before lunch refers to "12-14".
         - After Lunch time refers to "14-17".
         - Before Dinner time refers to "16-19".
-        - Supported categories are grocery, electronics, and cooked food.
         """)
     humanMsg = HumanMessage(f"{user_input}")
 
@@ -70,24 +69,32 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
             })
         else:
             parsedItems = parsedResult.get("items", [])
-            state["parsed_items"] = parsedItems
-            state["user_pincode"] = parsedResult.get("pincode", "")
-            state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
-            state["next_agent"] = "purchase_agent"
+            if not parsedItems:
+                state["messages"].append({
+                    "role": "assistant",
+                    "content": "I'm sorry, I couldn't identify any items in your request. Could you please specify what you would like to purchase?"
+                })
+                state["next_agent"] = "human_input"
+            else:
+                state["parsed_items"] = parsedItems
+                state["user_pincode"] = parsedResult.get("pincode", "")
+                state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
 
-            # show parsed items to user
-            state["messages"].append({
-                "role": "assistant",
-                "content": f"I have understood your request. Here are the details:\n" +
-                           "\n".join([f"- {item['quantity']} {item.get('unit', '')} of {item['name']} ({item['category']})" for item in parsedItems]) +
-                           (f"\nPincode: {state['user_pincode']}" if state['user_pincode'] else "") +
-                           (f"\nPreferred Delivery Time: {state['delivery_time_preference']}" if state['delivery_time_preference'] else "")
-            })
+                # show parsed items to user
+                state["messages"].append({
+                    "role": "assistant",
+                    "content": f"I have understood your request. Here are the details:\n" +
+                            "\n".join([f"- {item['quantity']} {item.get('unit', '')} of {item['name']} ({item['category']})" for item in parsedItems]) +
+                            (f"\nPincode: {state['user_pincode']}" if state['user_pincode'] else "") +
+                            (f"\nPreferred Delivery Time: {state['delivery_time_preference']}" if state['delivery_time_preference'] else "")
+                })
+
+            state["next_agent"] = "purchase_agent"
     except json.JSONDecodeError:
         state["messages"].append({
             "role": "assistant",
             "content": "I'm sorry, I couldn't understand your request. Could you please rephrase?"
         })
-        state["next_agent"] = "human_input_agent"
+        state["next_agent"] = "human_input"
 
     return state

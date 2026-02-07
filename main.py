@@ -3,7 +3,7 @@ from agents.billing import billing_agent
 from agents.purchase import purchase_agent
 from models.state import PurchaseState
 from agents.intent_parser import intent_parser_agent
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, HumanMessage
 
 def conditional_routing(state: PurchaseState):
       """ Conditional routing logic based on state """
@@ -18,11 +18,7 @@ def conditional_routing(state: PurchaseState):
       
       return next_agent
 
-def run_purchase_buddy():
-  print("Welcome to PurchaseBuddy! Type your requests below.\n")
-  print("Example: 'I want a plate of biryani for dinner in my pin 700001 within INR 300, Very hungry! Quick Please'")
-  print("Type 'exit' to quit the application.\n")
-
+def create_graph():
   graph = StateGraph(PurchaseState)
   # nodes
   graph.add_node("intent_parser", intent_parser_agent)
@@ -48,88 +44,110 @@ def run_purchase_buddy():
   })
 
   # compile the graph into an executable app
-  app = graph.compile()
+  return graph.compile()
 
   # print(app.get_graph().draw_mermaid())
+class PurchaseBuddy:
+     def __init__(self, graph):
+          self.graph = graph
+          self.message_display_count = 0
+          self.state = PurchaseState(
+              messages=[],
+              user_input="",
+              parsed_items=[],
+              user_pincode="",
+              delivery_time_preference="",
+              next_agent="intent_parser",
+              selected_provider="",
+              provider_results={},
+              final_order={},
+              need_human_approval=False
+          )
+     
+     def display_messages(self):
+      """ Display messages that haven't been displayed yet """
+      currentState = self.state
+      messages = currentState.get("messages", [])
+      newMessages = messages[self.message_display_count:]
+      print(messages)
+      print(newMessages)
 
-  state = PurchaseState(
-      messages=[],
-      user_input="",
-      parsed_items=[],
-      user_pincode="",
-      delivery_time_preference="",
-      next_agent="intent_parser",
-      selected_provider="",
-      provider_results={},
-      final_order={},
-      need_human_approval=False
-  )
-
-  while True:
-      user_input = input("You: ").strip()
-
-      if not user_input:
-            continue
+      for msg in newMessages:
+           if isinstance(msg, AIMessage):
+                  print(f"\n🤖 Buddy: {msg.content}")
       
-      if user_input.lower() in ["exit", "quit", "bye"]:
-            print("\nThanks for using PurchaseBuddy!")
-            break
-      
-      state["user_input"] = user_input
+      # update last displayed message count
+      self.message_display_count += len(messages)
 
-      # append user message to state messages
-      state["messages"].append({
-            "role": "user",
-            "content": user_input
-      })
+     def run(self):
+         print("Welcome to PurchaseBuddy! Type your requests below.\n")
+         print("Example: 'I want a plate of biryani for lunch in my pin 700001 within INR 300, Very hungry! Quick Please'")
+         print("Type 'exit' to quit the application.\n")
 
-      # invoke the app with the current state
-      result = app.invoke(state)
-      state.update(result)
-      # print(state["messages"])
+         while True:
+            user_input = input("You: ").strip()
 
-      messages = result.get("messages", [])
-      if messages:
-            lastMessage = messages[-1]
-      if isinstance(lastMessage, AIMessage):
-            print(f"\n🤖 Buddy: {lastMessage.content}")
-      
-      if result.get("need_human_approval", False):
-            approval = input("\nPlease type 'yes' to confirm the order or 'no' to cancel: ").strip().lower()
-            if approval in ['yes', 'y']:
-                  print("\n ✅ Order confirmed! Thank you for using PurchaseBuddy.")
-                  # reset state for next interaction
-                  state = PurchaseState(
-                        messages=[],
-                        user_input="",
-                        parsed_items=[],
-                        user_pincode="",
-                        delivery_time_preference="",
-                        next_agent="intent_parser",
-                        selected_provider="",
-                        provider_results={},
-                        final_order={},
-                        need_human_approval=False
-                  )
-            else:
-                  print("\n ❌ Order cancelled. You can modify your request or exit.")
-                  approval_change = input("\nWould you like to adjust your request? (yes to continue, no to exit): ").strip().lower()
-                  if approval_change in ['yes', 'y']:
-                        print("\nLet's try again. Please enter your new request.")
-                        # Reset only necessary fields, keep messages if needed
-                        state["user_input"] = ""
-                        state["next_agent"] = "intent_parser"
-                        state["need_human_approval"] = False
+            if not user_input:
+                  continue
+            
+            if user_input.lower() in ["exit", "quit", "bye"]:
+                  print("\nThanks for using PurchaseBuddy!")
+                  break
+            
+            self.state["user_input"] = user_input
+
+            # append user message to state messages
+            self.state["messages"].append(HumanMessage(content=user_input))
+
+            # invoke the app with the current state
+            result = self.graph.invoke(self.state)
+            self.state.update(result)
+            
+            # display messages that haven't been displayed yet
+            self.display_messages()
+            
+            if result.get("need_human_approval", False):
+                  approval = input("\nPlease type 'yes' to confirm the order or 'no' to cancel: ").strip().lower()
+                  if approval in ['yes', 'y']:
+                        print("\n ✅ Order confirmed! Thank you for using PurchaseBuddy.")
+                        # reset state for next interaction
+                        self.state = PurchaseState(
+                              messages=[],
+                              message_display_count=0,
+                              user_input="",
+                              parsed_items=[],
+                              user_pincode="",
+                              delivery_time_preference="",
+                              next_agent="intent_parser",
+                              selected_provider="",
+                              provider_results={},
+                              final_order={},
+                              need_human_approval=False
+                        )
                   else:
-                        print("\nThanks for using PurchaseBuddy! Goodbye.")
-                        break
+                        print("\n ❌ Order cancelled. You can modify your request or exit.")
+                        approval_change = input("\nWould you like to adjust your request? (yes to continue, no to exit): ").strip().lower()
+                        if approval_change in ['yes', 'y']:
+                              print("\nLet's try again. Please enter your new request.")
+                              # Reset only necessary fields, keep messages if needed
+                              self.state["user_input"] = ""
+                              self.state["next_agent"] = "intent_parser"
+                              self.state["need_human_approval"] = False
+                        else:
+                              print("\nThanks for using PurchaseBuddy! Goodbye.")
+                              break
+                  
             
-           
-      # try:
-            
-      # except Exception as e:
-      #      print(f"Error: {e}")
-      #      state = None
+            # try:
+                  
+            # except Exception as e:
+            #      print(f"Error: {e}")
+            #      state = None
+
+def run_purchase_buddy():
+      graph = create_graph()
+      app = PurchaseBuddy(graph)
+      app.run()
 
 if __name__ == "__main__":
     run_purchase_buddy()

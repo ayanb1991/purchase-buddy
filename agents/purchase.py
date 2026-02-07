@@ -1,6 +1,6 @@
 import json
 from langchain_openai import AzureChatOpenAI
-from langchain.messages import HumanMessage, SystemMessage
+from langchain.messages import HumanMessage, SystemMessage, AIMessage
 from config import azure_openai_api_key, azure_openai_endpoint, azure_openai_deployment, azure_openai_api_version
 from models.state import PurchaseState
 from tools.swiggy import searchSwiggy
@@ -16,10 +16,7 @@ llm = AzureChatOpenAI(
 
 def purchase_agent(state: PurchaseState) -> PurchaseState:
     """ purchase agent - placeholder for future implementation """
-    state["messages"].append({
-        "role": "assistant",
-        "content": f"Choosing items and providers based on your preferences....."
-    })
+    state["messages"].append(AIMessage(content="Processing your request and searching for the best providers..."))
     parsedItems = state.get("parsed_items", [])
     userPincode = state.get("user_pincode", "")
     providerResults = {}
@@ -92,33 +89,23 @@ def purchase_agent(state: PurchaseState) -> PurchaseState:
                 selected_providers[item_name] = decision.get("selectedProvider", "")
 
         if needs_clarification:
-            state["messages"].append({
-                "role": "assistant",
-                "content": "Some items need clarification:\n" + "\n\n".join(clarification_msgs)
-            })
+            state["messages"].append(AIMessage(content="Some items need clarification:\n" + "\n\n".join(clarification_msgs)))
             state["next_agent"] = "human_input"
         elif missing_provider:
-            state["messages"].append({
-                "role": "assistant",
-                "content": "Could not select provider for some items:\n" + "\n\n".join(missing_provider_msgs) +
+            state["messages"].append(AIMessage(content="Could not select provider for some items:\n" + "\n\n".join(missing_provider_msgs) +
                            "\nCould you please provide more details or try again?"
-            })
+            ))
             state["next_agent"] = "human_input"
         else:
             state["selected_provider"] = selected_providers
-            state["messages"].append({
-                "role": "assistant",
-                "content": "Selected providers:\n" + "\n".join(
+            state["messages"].append(AIMessage(content="Selected providers:\n" + "\n".join(
                     [f"{item}: {provider}" for item, provider in selected_providers.items()]
                 ) + "\nProceeding to billing."
-            })
+            ))
             state["next_agent"] = "billing_agent"
 
     except json.JSONDecodeError:
-        state["messages"].append({
-            "role": "assistant",
-            "content": "I'm sorry, I couldn't process your request. Do you want to try again?"
-        })
+        state["messages"].append(AIMessage(content="I'm sorry, I couldn't process your request. Do you want to try again?"))
         state["next_agent"] = "human_input"
 
     return state

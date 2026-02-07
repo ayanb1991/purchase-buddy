@@ -1,7 +1,7 @@
 import json
 from models.state import PurchaseState
 from langchain_openai import AzureChatOpenAI
-from langchain.messages import HumanMessage, SystemMessage
+from langchain.messages import HumanMessage, SystemMessage, AIMessage
 from config import azure_openai_api_key, azure_openai_endpoint, azure_openai_deployment, azure_openai_api_version
 
 # initialize LangChain LLM with Azure OpenAI
@@ -63,17 +63,15 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
         parsedResult = json.loads(response.content)
 
         if parsedResult.get("needsClarification", False):
-            state["messages"].append({
-                "role": "assistant",
-                "content": "I have a few questions to clarify your request:\n" + "\n".join(parsedResult.get("clarificationQuestions", []))
-            })
+            state["messages"].append(
+                AIMessage(content="I have a few questions to clarify your request:\n" + "\n".join(parsedResult.get("clarificationQuestions", [])))
+            )
         else:
             parsedItems = parsedResult.get("items", [])
             if not parsedItems:
-                state["messages"].append({
-                    "role": "assistant",
-                    "content": "I'm sorry, I couldn't identify any items in your request. Could you please specify what you would like to purchase?"
-                })
+                state["messages"].append(
+                    AIMessage(content="I'm sorry, I couldn't identify any items in your request. Could you please specify what you would like to purchase?")
+                )
                 state["next_agent"] = "human_input"
             else:
                 state["parsed_items"] = parsedItems
@@ -81,20 +79,20 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
                 state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
 
                 # show parsed items to user
-                state["messages"].append({
-                    "role": "assistant",
-                    "content": f"I have understood your request. Here are the details:\n" +
-                            "\n".join([f"- {item['quantity']} {item.get('unit', '')} of {item['name']} ({item['category']})" for item in parsedItems]) +
-                            (f"\nPincode: {state['user_pincode']}" if state['user_pincode'] else "") +
-                            (f"\nPreferred Delivery Time: {state['delivery_time_preference']}" if state['delivery_time_preference'] else "")
-                })
+                state["messages"].append(
+                    AIMessage(
+                        content=f"I have understood your request. Here are the details:\n" +
+                                "\n".join([f"- {item['quantity']} {item.get('unit', '')} of {item['name']} ({item['category']})" for item in parsedItems]) +
+                                (f"\nPincode: {state['user_pincode']}" if state['user_pincode'] else "") +
+                                (f"\nPreferred Delivery Time: {state['delivery_time_preference']}" if state['delivery_time_preference'] else "")
+                    )
+                )
 
             state["next_agent"] = "purchase_agent"
     except json.JSONDecodeError:
-        state["messages"].append({
-            "role": "assistant",
-            "content": "I'm sorry, I couldn't understand your request. Could you please rephrase?"
-        })
+        state["messages"].append(
+            AIMessage(content="I'm sorry, I couldn't understand your request. Could you please rephrase?")
+        )
         state["next_agent"] = "human_input"
 
     return state

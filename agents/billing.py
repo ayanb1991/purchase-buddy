@@ -1,4 +1,5 @@
 from models.state import PurchaseState
+from langchain.messages import AIMessage
 
 def billing_agent(state: PurchaseState) -> PurchaseState:
     """ billing agent - calculate total and create order summary """
@@ -49,10 +50,7 @@ def billing_agent(state: PurchaseState) -> PurchaseState:
     orderSummary += f"Total Amount: {finalOrder['totalAmount']}\n"
     orderSummary += f"Delivery Preference: {finalOrder['deliveryPreference']}\n"
 
-    state["messages"].append({
-        "role": "assistant",
-        "content": orderSummary
-    })
+    state["messages"].append(AIMessage(content=orderSummary))
     # ask for human approval
     state["need_human_approval"] = True
     state["next_agent"] = "human_approval"

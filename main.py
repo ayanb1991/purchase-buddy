@@ -1,52 +1,6 @@
-from langgraph.graph import StateGraph, END
-from agents.billing import billing_agent
-from agents.purchase import purchase_agent
 from models.state import PurchaseState
-from agents.intent_parser import intent_parser_agent
 from langchain_core.messages import AIMessage, HumanMessage
-
-def conditional_routing(state: PurchaseState):
-      """ Conditional routing logic based on state """
-      next_agent = state.get("next_agent", "")
-
-      if next_agent == "human_input":
-          return END
-      if next_agent == "human_approval":
-          return END
-      elif next_agent == "end":
-          return END
-      
-      return next_agent
-
-def create_graph():
-  graph = StateGraph(PurchaseState)
-  # nodes
-  graph.add_node("intent_parser", intent_parser_agent)
-  graph.add_node("purchase_agent", purchase_agent)
-  graph.add_node("billing_agent", billing_agent)
-
-  graph.set_entry_point("intent_parser")
-
-  # edges
-  graph.add_conditional_edges("intent_parser", conditional_routing, {
-       "human_input": END,
-       "purchase_agent": "purchase_agent",
-       END: END
-  })
-  graph.add_conditional_edges("purchase_agent", conditional_routing, {
-       "human_input": END,
-       "billing_agent": "billing_agent",
-       END: END
-  })
-  graph.add_conditional_edges("billing_agent", conditional_routing, {
-       "human_input": END,
-       END: END
-  })
-
-  # compile the graph into an executable app
-  return graph.compile()
-
-  # print(app.get_graph().draw_mermaid())
+from graph import create_graph
 class PurchaseBuddy:
      def __init__(self, graph):
           self.graph = graph
@@ -69,8 +23,8 @@ class PurchaseBuddy:
       currentState = self.state
       messages = currentState.get("messages", [])
       newMessages = messages[self.message_display_count:]
-      print(messages)
-      print(newMessages)
+      # print(messages)
+      # print(newMessages)
 
       for msg in newMessages:
            if isinstance(msg, AIMessage):

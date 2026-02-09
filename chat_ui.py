@@ -1,13 +1,16 @@
+import uuid
 import streamlit as st
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
+from langchain_core.messages import AIMessage, HumanMessage
+from graph import create_graph, prepareState
 
 # Page configuration
 st.set_page_config(
     page_title="PurchaseBuddy",
-    page_icon="🛒",
-    layout="wide",
+    page_icon="🥕",
+    layout="centered",
     initial_sidebar_state="collapsed"
 )
 
@@ -94,19 +97,22 @@ ASSISTANT_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'
 
 USER_AVATAR = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%236366f1'/%3E%3Ccircle cx='50' cy='40' r='15' fill='white'/%3E%3Cpath d='M50 60c-15 0-25 10-25 20h50c0-10-10-20-25-20z' fill='white'/%3E%3C/svg%3E"
 
-# Initialize session state
-if 'messages' not in st.session_state:
+# initialize session state
+if 'initialized' not in st.session_state:
+    st.session_state.initialized = True
+    st.session_state.graph = create_graph()
+    st.session_state.threadID = st.query_params.get("threadID", str(uuid.uuid4()))
     st.session_state.messages = [
         {
             "role": "assistant",
-            "content": "Hey there! 👋 Want to connect with an expert to talk through our pricing?",
-            "timestamp": "22 May"
+            "content": "Hey! 👋 I am Purchase Buddy, your personal shopping assistant.",
+            "timestamp": datetime.now().strftime("%H:%M")
         }
     ]
-    st.session_state.show_typing = False
+    st.session_state.showTyping = False
     st.session_state.scroll_key = 0
 
-# Build the entire HTML as a single string
+# build the entire HTML as a single string
 html_content = """
 <style>
     /* Import Google Font - Poppins */
@@ -409,7 +415,7 @@ html_content += f"""
     <div class="messages-container" id="messages">
 """
 
-# Build messages HTML
+# build messages HTML
 for idx, message in enumerate(st.session_state.messages):
     if message["role"] == "assistant":
         if idx == 0:
@@ -422,7 +428,7 @@ for idx, message in enumerate(st.session_state.messages):
 </div>
 """
         
-        # Show action buttons after first assistant message
+        # show action buttons after first assistant message
         if idx == 0:
             html_content += """
 <div class="action-buttons">
@@ -448,8 +454,8 @@ for idx, message in enumerate(st.session_state.messages):
 </div>
 """
 
-# Add typing indicator if needed
-if st.session_state.get('show_typing', False):
+# typing indicator
+if st.session_state.get('showTyping', False):
     html_content += f"""
 <div class="message assistant">
     <img src="{ASSISTANT_AVATAR}" class="message-avatar" alt="Assistant">
@@ -461,7 +467,7 @@ if st.session_state.get('show_typing', False):
 </div>
 """
 
-# Close the HTML structure
+# HTML structur closing tags
 html_content += f"""
 </div>
 </div>
@@ -473,54 +479,72 @@ html_content += f"""
         if (messagesContainer) {{
             messagesContainer.scrollTop = messagesContainer.scrollHeight;
         }}
-        console.log('Html close');
     }}, 100);
 </script>
 """
 
-# Render the entire HTML as a single block
-# st.markdown(html_content, unsafe_allow_html=True)
-# Embed the HTML string and execute the JavaScript
+# render the entire HTML as a single block
+# embed the HTML string and execute the JavaScript
 components.html(html_content, height=1000)
 
-# Chat input (Streamlit's native chat input) - placed outside
-user_input = st.chat_input("Type your message here...")
+def syncUserMsgToGraph(userMessageContent: str):
+    """ sync last user message to the graph's state for processing"""
+
+    config = {"configurable": {"thread_id": st.session_state.threadID}}
+    # graphState = st.session_state.graph.get_state()
+    graphStateNext = prepareState()
+    graphStateNext["messages"].append(HumanMessage(content=userMessageContent))
+    currentGraphState = st.session_state.graph.invoke(graphStateNext, config=config)
+
+    return currentGraphState
+
+# chat input (Streamlit's native chat input) - placed outside
+user_input = st.chat_input("What you like to order...")
 
 if user_input:
-    # Add user message
+    # add user message to st session state
     st.session_state.messages.append({
         "role": "user",
         "content": user_input,
         "timestamp": datetime.now().strftime("%H:%M")
     })
     
-    # Increment scroll key to trigger scroll
+    # increment scroll key to trigger scroll
     st.session_state.scroll_key += 1
     
-    # Show typing indicator
-    st.session_state.show_typing = True
+    # show typing indicator
+    st.session_state.showTyping = True
     st.rerun()
 
-# Simulate assistant response after typing
-if st.session_state.get('show_typing', False):
+if st.session_state.get('showTyping', False):
     time.sleep(1.5)
-    st.session_state.show_typing = False
+    st.session_state.showTyping = False
+
+    # try:
+    # get last user message
+    lastUserMessageFromStState = next((msg for msg in reversed(st.session_state.messages) if msg["role"] == "user"), None)
+    if lastUserMessageFromStState:
+        responseState = syncUserMsgToGraph(lastUserMessageFromStState["content"])
+        responseStateMessages = responseState["messages"]
+
+        # get assistant messages from graph response and add to session state
+        assistantMessages = responseStateMessages[-1]
+        if assistantMessages:
+            # add assistant messages to session state
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": assistantMessages.content,
+                "timestamp": datetime.now().strftime("%H:%M")
+            })
+
+    # except Exception as e:
+    #     print(f"Error processing message: {e}")
+    #     st.session_state.messages.append({
+    #         "role": "assistant",
+    #         "content": "Sorry, something went wrong. Please try again.",
+    #         "timestamp": datetime.now().strftime("%H:%M")
+    #     })
     
-    # Sample responses
-    responses = [
-        "Great! I can help you find the best deals on groceries. What categories are you interested in? 🛒",
-        "Thanks for reaching out! Our fresh produce section has amazing offers this week. Would you like to know more? 🥬🍎",
-        "Perfect timing! We have special discounts on dairy products and fresh meat. Let me share the details! 🥛🥩",
-        "I'd be happy to help! Our PurchaseBuddy service makes grocery shopping easy and affordable. What are you looking for today? 🛍️"
-    ]
-    
-    import random
-    st.session_state.messages.append({
-        "role": "assistant",
-        "content": random.choice(responses),
-        "timestamp": datetime.now().strftime("%H:%M")
-    })
-    
-    # Increment scroll key to trigger scroll
+    # increment scroll key to trigger scroll
     st.session_state.scroll_key += 1
     st.rerun()

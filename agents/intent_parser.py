@@ -28,8 +28,10 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
         messages = state.get("messages", [])
         if messages:
             # get the last user message
-            user_input = messages[-1].get("content", "")
+            lastMesage = messages[-1]
+            user_input = lastMesage.content if isinstance(lastMesage, HumanMessage) else ""
 
+    print(f"User Input: {user_input}")
     systemMsg = SystemMessage("""You are an intent parser cum analyser agent. Your job is to parse user requests for purchasing items and extract relevant information such as item names, categories, quantities, price expectations, delivery preferences and units.
         Respond only in JSON format with the following structure:
         {{
@@ -66,6 +68,7 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
             state["messages"].append(
                 AIMessage(content="I have a few questions to clarify your request:\n" + "\n".join(parsedResult.get("clarificationQuestions", [])))
             )
+            state["next_agent"] = "human_input"
         else:
             parsedItems = parsedResult.get("items", [])
             if not parsedItems:

@@ -4,7 +4,7 @@ from graph import create_graph
 class PurchaseBuddy:
      def __init__(self, graph):
           self.graph = graph
-          self.message_display_count = 0
+          self.messageDisplayCount = 0
           self.state = PurchaseState(
               messages=[],
               user_input="",
@@ -22,7 +22,7 @@ class PurchaseBuddy:
       """ Display messages that haven't been displayed yet """
       currentState = self.state
       messages = currentState.get("messages", [])
-      newMessages = messages[self.message_display_count:]
+      newMessages = messages[self.messageDisplayCount:]
       # print(messages)
       # print(newMessages)
 
@@ -31,7 +31,7 @@ class PurchaseBuddy:
                   print(f"\n🤖 Buddy: {msg.content}")
       
       # update last displayed message count
-      self.message_display_count += len(messages)
+      self.messageDisplayCount += len(messages)
 
      def run(self):
          print("Welcome to PurchaseBuddy! Type your requests below.\n")
@@ -67,7 +67,7 @@ class PurchaseBuddy:
                         # reset state for next interaction
                         self.state = PurchaseState(
                               messages=[],
-                              message_display_count=0,
+                              messageDisplayCount=0,
                               user_input="",
                               parsed_items=[],
                               user_pincode="",

@@ -4,6 +4,7 @@ from agents.purchase import purchase_agent
 from models.state import PurchaseState
 from agents.intent_parser import intent_parser_agent
 from langgraph.checkpoint.memory import InMemorySaver
+from langchain_core.messages import HumanMessage
 
 def conditional_routing(state: PurchaseState):
       """ Conditional routing logic based on state """
@@ -18,10 +19,16 @@ def conditional_routing(state: PurchaseState):
       
       return next_agent
 
-def prepareState() -> PurchaseState:
+def prepareState(state:PurchaseState = None, userInput="") -> PurchaseState:
+    if state and state != {}:
+        state["messages"].append(HumanMessage(content=userInput))
+        state["next_agent"] = "intent_parser"
+        state["need_human_approval"] = False
+        return state
     return PurchaseState(
-            messages=[],
-            user_input="",
+            messages=[HumanMessage(content=userInput)],
+            # user_input must store the initial user query
+            user_input= userInput,
             parsed_items=[],
             user_pincode="",
             delivery_time_preference="",

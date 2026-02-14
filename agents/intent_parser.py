@@ -22,29 +22,37 @@ llm = AzureChatOpenAI(
   - Decide the next action.
 """
 def intent_parser_agent(state: PurchaseState) -> PurchaseState:
-    user_input = state.get("user_input", "")
+    messages = state.get("messages", [])
+    current_user_input = ""
+    if messages:
+        # get the last user message
+        lastMessage = messages[-1]
+        current_user_input = lastMessage.content if isinstance(lastMessage, HumanMessage) else ""
 
-    if not user_input:
-        messages = state.get("messages", [])
-        if messages:
-            # get the last user message
-            lastMesage = messages[-1]
-            user_input = lastMesage.content if isinstance(lastMesage, HumanMessage) else ""
+    print(f"Current user input: {current_user_input}")
 
-    print(f"User Input: {user_input}")
-    systemMsg = SystemMessage("""You are an intent parser cum analyser agent. Your job is to parse user requests for purchasing items and extract relevant information such as item names, categories, quantities, price expectations, delivery preferences and units.
-        Respond only in JSON format with the following structure:
+    # create state representation for LLM
+    currentState = {
+        "items": state.get("parsed_items", []),
+        "pincode": state.get("user_pincode", ""),
+        "deliveryPreference": state.get("delivery_time_preference", "")
+    }
+
+    systemMsg = SystemMessage(f"""You are an intent parser cum analyser agent. Your job is to parse user requests for purchasing items and extract relevant information such as item names, categories, quantities, price expectations, delivery preferences and units.
+        - Ask for clarifications if the user request is ambiguous or until all mandatory fields are provided.
+        - Look into current graph state to avoid asking for information that is already available.
+        - Respond in JSON format strictly with the following structure:
         {{
             "items": [{{
-                "name": <item name>,
-                "category": <grocery|electronics|cookedFood>,
-                "quantity": <quantity>,
-                "unit": <kg|litre|pcs||plate>,
-                "priceExpectation": <price expectation if mentioned>,
-                "isQuickDelivery": <true/false if mentioned like urgent|asap|instantly|quickly>,
+                "name": <item name> | mandatory,
+                "category": <grocery|electronics|cookedFood> | mandatory,
+                "quantity": <quantity> | mandatory,
+                "unit": <kg|litre|pcs|plate> | mandatory,
+                "priceExpectation": <price expectation if mentioned> | optional,
+                "isQuickDelivery": <true/false if mentioned like urgent|asap|instantly|quickly> | optional,
             }}],
-        "pincode": <pincode if mentioned>,
-        "deliveryPreference": <preferred delivery time if mentioned>,
+        "pincode": <pincode if mentioned> | mandatory,
+        "deliveryPreference": <preferred delivery time if mentioned> | optional,
         "needsClarification": <true/false>,
         "clarificationQuestions": [<list of questions if needsClarification is true>]
         }}
@@ -54,7 +62,7 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
         - After Lunch time refers to "14-17".
         - Before Dinner time refers to "16-19".
         """)
-    humanMsg = HumanMessage(f"{user_input}")
+    humanMsg = HumanMessage(f"current user request: {current_user_input}, current state: {json.dumps(currentState)}")
 
     intentParserPrompt = [systemMsg, humanMsg]
     # build the chain and invoke
@@ -63,6 +71,11 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
 
     try:
         parsedResult = json.loads(response.content)
+        # even though clarification is needed, we still store whatever info we have
+        parsedItems = parsedResult.get("items", [])
+        state["parsed_items"] = parsedItems
+        state["user_pincode"] = parsedResult.get("pincode", "")
+        state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
 
         if parsedResult.get("needsClarification", False):
             state["messages"].append(
@@ -70,17 +83,12 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
             )
             state["next_agent"] = "human_input"
         else:
-            parsedItems = parsedResult.get("items", [])
             if not parsedItems:
                 state["messages"].append(
                     AIMessage(content="I'm sorry, I couldn't identify any items in your request. Could you please specify what you would like to purchase?")
                 )
                 state["next_agent"] = "human_input"
             else:
-                state["parsed_items"] = parsedItems
-                state["user_pincode"] = parsedResult.get("pincode", "")
-                state["delivery_time_preference"] = parsedResult.get("deliveryPreference", "")
-
                 # show parsed items to user
                 state["messages"].append(
                     AIMessage(

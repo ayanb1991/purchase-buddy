@@ -3,7 +3,7 @@ import streamlit as st
 import time
 from datetime import datetime
 import streamlit.components.v1 as components
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage
 from graph import create_graph, prepareState
 
 # Page configuration
@@ -110,7 +110,9 @@ if 'initialized' not in st.session_state:
         }
     ]
     st.session_state.showTyping = False
-    st.session_state.scroll_key = 0
+    st.session_state.scrollKey = 0
+    st.session_state.needUserApproval = False
+    st.session_state.messageDisplayCount = 0
 
 # build the entire HTML as a single string
 html_content = """
@@ -473,7 +475,7 @@ html_content += f"""
 </div>
 <script>
     // Use unique key to ensure script runs on each update
-    const scrollKey_{st.session_state.scroll_key}_{int(time.time() * 1000)} = true;
+    const scrollKey_{st.session_state.scrollKey}_{int(time.time() * 1000)} = true;
     setTimeout(function() {{
         const messagesContainer = document.getElementById('messages');
         if (messagesContainer) {{
@@ -491,12 +493,56 @@ def syncUserMsgToGraph(userMessageContent: str):
     """ sync last user message to the graph's state for processing"""
 
     config = {"configurable": {"thread_id": st.session_state.threadID}}
-    # graphState = st.session_state.graph.get_state()
-    graphStateNext = prepareState()
-    graphStateNext["messages"].append(HumanMessage(content=userMessageContent))
+    graphStateCurrent = st.session_state.graph.get_state(config=config)
+    graphStateNext = prepareState(graphStateCurrent.values, userMessageContent)
     currentGraphState = st.session_state.graph.invoke(graphStateNext, config=config)
+    needUserApproval = currentGraphState["need_human_approval"]
+    # set flag in session state to show approval buttons in UI
+    st.session_state.needUserApproval = needUserApproval
 
     return currentGraphState
+
+def display_messages(messages):
+    """ Display messages that haven't been displayed yet """
+    msgDisplayCount = st.session_state.get("messageDisplayCount", 0)
+    newMessages = messages[msgDisplayCount:]
+
+    for msg in newMessages:
+           if isinstance(msg, AIMessage):
+               
+            # add assistant messages to session state
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": msg.content,
+                "timestamp": datetime.now().strftime("%H:%M")
+            })
+
+    # update last displayed message count
+    st.session_state.messageDisplayCount = len(messages)
+
+# approval buttons
+if st.session_state.needUserApproval:
+    btnContainer = st.container()
+
+    with btnContainer:
+        if st.button("Approve", type="primary"):
+            st.session_state.needUserApproval = False
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "✅ Order confirmed! Thank you for using PurchaseBuddy.",
+                "timestamp": datetime.now().strftime("%H:%M")
+            })
+            st.rerun()
+        if st.button("Cancel", type="secondary"):
+            st.session_state.needUserApproval = False
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": "❌ Order cancelled. You can start a new order anytime.",
+                "timestamp": datetime.now().strftime("%H:%M")
+            })
+            st.rerun()
+        
+
 
 # chat input (Streamlit's native chat input) - placed outside
 user_input = st.chat_input("What you like to order...")
@@ -510,7 +556,7 @@ if user_input:
     })
     
     # increment scroll key to trigger scroll
-    st.session_state.scroll_key += 1
+    st.session_state.scrollKey += 1
     
     # show typing indicator
     st.session_state.showTyping = True
@@ -526,16 +572,7 @@ if st.session_state.get('showTyping', False):
     if lastUserMessageFromStState:
         responseState = syncUserMsgToGraph(lastUserMessageFromStState["content"])
         responseStateMessages = responseState["messages"]
-
-        # get assistant messages from graph response and add to session state
-        assistantMessages = responseStateMessages[-1]
-        if assistantMessages:
-            # add assistant messages to session state
-            st.session_state.messages.append({
-                "role": "assistant",
-                "content": assistantMessages.content,
-                "timestamp": datetime.now().strftime("%H:%M")
-            })
+        display_messages(responseStateMessages)
 
     # except Exception as e:
     #     print(f"Error processing message: {e}")
@@ -546,5 +583,5 @@ if st.session_state.get('showTyping', False):
     #     })
     
     # increment scroll key to trigger scroll
-    st.session_state.scroll_key += 1
+    st.session_state.scrollKey += 1
     st.rerun()

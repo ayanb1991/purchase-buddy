@@ -67,7 +67,7 @@ def intent_parser_agent(state: PurchaseState) -> PurchaseState:
     intentParserPrompt = [systemMsg, humanMsg]
     # build the chain and invoke
     response = llm.invoke(intentParserPrompt)
-    print(f"LLM Response: {response.content}")
+    print(f"IntentParser:LLM Response: {response.content}")
 
     try:
         parsedResult = json.loads(response.content)

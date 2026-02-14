@@ -3,6 +3,7 @@ from agents.billing import billing_agent
 from agents.purchase import purchase_agent
 from models.state import PurchaseState
 from agents.intent_parser import intent_parser_agent
+from agents.supervisor import supervisor_agent
 from langgraph.checkpoint.memory import InMemorySaver
 from langchain_core.messages import HumanMessage
 
@@ -34,8 +35,8 @@ def prepareState(state:PurchaseState = None, userInput="") -> PurchaseState:
             delivery_time_preference="",
             next_agent="intent_parser",
             selected_provider="",
-            provider_results={},
-            final_order={},
+            provider_results=None,
+            final_order=None,
             need_human_approval=False
         )
 
@@ -45,18 +46,26 @@ def create_graph():
   graph.add_node("intent_parser", intent_parser_agent)
   graph.add_node("purchase_agent", purchase_agent)
   graph.add_node("billing_agent", billing_agent)
+  graph.add_node("supervisor_agent", supervisor_agent)
 
-  graph.set_entry_point("intent_parser")
+  graph.set_entry_point("supervisor_agent")
 
   # edges
-  graph.add_conditional_edges("intent_parser", conditional_routing, {
-       "human_input": END,
+  graph.add_conditional_edges("supervisor_agent", conditional_routing, {
+       "intent_parser": "intent_parser",
        "purchase_agent": "purchase_agent",
+       "billing_agent": "billing_agent",
+       "human_input": END,
+       END: END
+  })
+  graph.add_conditional_edges("intent_parser", conditional_routing, {
+       "purchase_agent": "purchase_agent",
+       "human_input": END,
        END: END
   })
   graph.add_conditional_edges("purchase_agent", conditional_routing, {
-       "human_input": END,
        "billing_agent": "billing_agent",
+       "human_input": END,
        END: END
   })
   graph.add_conditional_edges("billing_agent", conditional_routing, {

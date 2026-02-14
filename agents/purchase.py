@@ -3,7 +3,8 @@ from langchain_openai import AzureChatOpenAI
 from langchain.messages import HumanMessage, SystemMessage, AIMessage
 from config import azure_openai_api_key, azure_openai_endpoint, azure_openai_deployment, azure_openai_api_version
 from models.state import PurchaseState
-from tools.swiggy import searchSwiggy
+from tools.blinkfit import searchBlinkfit
+from tools.sniggy import searchSniggy
 
 # initialize LangChain LLM with Azure OpenAI
 llm = AzureChatOpenAI(
@@ -26,13 +27,16 @@ def purchase_agent(state: PurchaseState) -> PurchaseState:
         itemCategory = item.get("category", "").lower()
 
         # search in different providers
-        swiggyResults = searchSwiggy(itemName, itemCategory, userPincode)
-        print(f"Swiggy Results for {itemName}: {swiggyResults}")
+        sniggyResults = searchSniggy(itemName, itemCategory, userPincode)
+        blinkfitResults = searchBlinkfit(itemName, itemCategory, userPincode)
 
         # one item may have results from multiple providers
+        # user can search for multiple items
         providerResults[itemName] = {
-            "swiggy": swiggyResults,
+            "sniggy": sniggyResults,
+            "blinkfit": blinkfitResults
         }
+        print("Provider results", providerResults)
 
         state["provider_results"] = providerResults
 
@@ -95,6 +99,8 @@ def purchase_agent(state: PurchaseState) -> PurchaseState:
             state["messages"].append(AIMessage(content="Could not select provider for some items:\n" + "\n\n".join(missing_provider_msgs) +
                            "\nCould you please provide more details or try again?"
             ))
+            # reset parsed items to trigger re-parsing with more details
+            state["parsed_items"] = []
             state["next_agent"] = "human_input"
         else:
             state["selected_provider"] = selected_providers

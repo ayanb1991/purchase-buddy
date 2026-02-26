@@ -438,13 +438,13 @@ for idx, message in enumerate(st.session_state.messages):
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
         </svg>
-        Find more about pricing!
+        Welcome to PurchaseBuddy!
     </button>
     <button class="action-button">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/>
         </svg>
-        Talk to an expert!
+        Just chat to order anything!
     </button>
 </div>
 """
@@ -489,14 +489,27 @@ html_content += f"""
 # embed the HTML string and execute the JavaScript
 components.html(html_content, height=1000)
 
+def printFromUpdate(chunk: dict):
+    for chunk in chunk.items():
+        node_name, delta = chunk
+        if node_name == "supervisor_agent":
+            continue
+        messages = delta.get("messages", [])
+        print(f"Messages from update: {messages}")
+        display_messages(messages)
+ 
 def syncUserMsgToGraph(userMessageContent: str):
     """ sync last user message to the graph's state for processing"""
 
     config = {"configurable": {"thread_id": st.session_state.threadID}}
     graphStateCurrent = st.session_state.graph.get_state(config=config)
     graphStateNext = prepareState(graphStateCurrent.values, userMessageContent)
-    currentGraphState = st.session_state.graph.invoke(graphStateNext, config=config)
-    needUserApproval = currentGraphState["need_human_approval"]
+    for mode, chunk in st.session_state.graph.stream(graphStateNext, config=config, stream_mode=["updates"]):
+        if mode == "updates":
+            printFromUpdate(chunk)
+
+    currentGraphState = st.session_state.graph.get_state(config=config)
+    needUserApproval = currentGraphState.values["need_human_approval"]
     # set flag in session state to show approval buttons in UI
     st.session_state.needUserApproval = needUserApproval
 
@@ -566,21 +579,19 @@ if st.session_state.get('showTyping', False):
     time.sleep(1.5)
     st.session_state.showTyping = False
 
-    # try:
-    # get last user message
-    lastUserMessageFromStState = next((msg for msg in reversed(st.session_state.messages) if msg["role"] == "user"), None)
-    if lastUserMessageFromStState:
-        responseState = syncUserMsgToGraph(lastUserMessageFromStState["content"])
-        responseStateMessages = responseState["messages"]
-        display_messages(responseStateMessages)
+    try:
+        # get last user message
+        lastUserMessageFromStState = next((msg for msg in reversed(st.session_state.messages) if msg["role"] == "user"), None)
+        if lastUserMessageFromStState:
+            responseState = syncUserMsgToGraph(lastUserMessageFromStState["content"])
 
-    # except Exception as e:
-    #     print(f"Error processing message: {e}")
-    #     st.session_state.messages.append({
-    #         "role": "assistant",
-    #         "content": "Sorry, something went wrong. Please try again.",
-    #         "timestamp": datetime.now().strftime("%H:%M")
-    #     })
+    except Exception as e:
+        print(f"Error processing message: {e}")
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": "Sorry, something went wrong. Please try again.",
+            "timestamp": datetime.now().strftime("%H:%M")
+        })
     
     # increment scroll key to trigger scroll
     st.session_state.scrollKey += 1
